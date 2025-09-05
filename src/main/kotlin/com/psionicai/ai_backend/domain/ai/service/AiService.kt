@@ -6,7 +6,9 @@ import com.openai.models.chat.completions.ChatCompletionCreateParams
 import com.psionicai.ai_backend.domain.ai.dto.request.SummarizeRequest
 import com.psionicai.ai_backend.domain.ai.dto.response.SummarizeResponse
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.psionicai.ai_backend.domain.ai.dto.request.KeywordRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SentimentRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.KeywordResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SentimentResponse
 import org.springframework.stereotype.Service
 
@@ -57,6 +59,53 @@ class AiService(
             return SentimentResponse(label, score)
         }
         return SentimentResponse("neutral", 0)
+    }
+
+    /* 상위 키워드 추출: topK 기반 */
+    fun keyword(req: KeywordRequest): KeywordResponse {
+        val topK = req.topK
+        val sys = """
+            You are a keyword extraction engine.
+            Extract the most salient, deduplicated keywords from the user's text.
+            - Language: follow the language of the input.
+            - Return EXACTLY $topK keywords (if not enough, return as many as possible).
+            - No explanations. Output ONLY valid JSON.
+            - JSON schema: {"keywords": ["k1","k2",...]}
+        """.trimIndent()
+
+        val user = "Extract the top $topK keywords from the following text:\n```${req.text}```"
+
+        val content = runJsonTask(sys, user)
+
+        // Json 파싱 시도
+        val parsedKeywords: List<String>? = runCatching {
+            val nano = mapper.readTree(content)
+            val arr = nano.get("keywords")
+            if (arr != null && arr.isArray) {
+                arr.mapNotNull { it.asText().trim() }
+                    .filter { it.isNotBlank() }
+            } else null
+        }.getOrNull()
+
+        // LLM이 JSON 형식을 어길 경우 간단한 로컬 백업 로직
+        val fallbackKeywords = if (parsedKeywords.isNullOrEmpty()) {
+            req.text
+                .lowercase()
+                .split(Regex("[\\s,.;:!?'\"()\\[\\]{}<>/\\\\]+"))
+                .filter { it.isNotBlank() }
+                .groupingBy { it }.eachCount()
+                .entries
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                .map { it.key }
+        } else parsedKeywords
+
+        // 중복 제거 및 개수 제한
+        val deduped = LinkedHashSet<String>().apply { fallbackKeywords.forEach { add(it) } }.toList()
+        val capped = deduped.take(topK)
+
+        return KeywordResponse(
+            keywords = capped
+        )
     }
 
     /* 공통 유틸 */

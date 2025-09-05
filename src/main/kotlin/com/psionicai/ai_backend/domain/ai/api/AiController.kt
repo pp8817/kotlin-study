@@ -1,7 +1,9 @@
 package com.psionicai.ai_backend.domain.ai.api
 
+import com.psionicai.ai_backend.domain.ai.dto.request.KeywordRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SentimentRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SummarizeRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.KeywordResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SentimentResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SummarizeResponse
 import com.psionicai.ai_backend.domain.ai.service.AiService
@@ -29,6 +31,13 @@ class AiController(
     @PostMapping("/sentiment")
     fun sentiment(@Validated @RequestBody req: SentimentRequest): ResponseEntity<SentimentResponse>? {
         val response: SentimentResponse = aiService.sentiment(req)
+        return ResponseEntity.ok(response)
+    }
+
+    /* 키워드 추출 */
+    @PostMapping("/keywords")
+    fun keywords(@Validated @RequestBody req: KeywordRequest): ResponseEntity<KeywordResponse>? {
+        val response: KeywordResponse = aiService.keyword(req)
         return ResponseEntity.ok(response)
     }
 }
