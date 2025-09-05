@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.openai.client.OpenAIClient
 import com.openai.models.ChatModel
 import com.openai.models.chat.completions.ChatCompletionCreateParams
-import com.psionicai.ai_backend.domain.ai.dto.SummarizeRequest
-import com.psionicai.ai_backend.domain.ai.dto.SummarizeResponse
+import com.psionicai.ai_backend.domain.ai.dto.request.SummarizeRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.SummarizeResponse
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.openai.models.chat.completions.ChatCompletion
+import com.psionicai.ai_backend.domain.ai.dto.request.SentimentRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.SentimentResponse
 import org.springframework.stereotype.Service
 
 @Service
@@ -17,7 +19,7 @@ class AiService(
     // Json 파서 준비 : LLM 응답이 Json일 때 파싱
     private val mapper = jacksonObjectMapper()
 
-    // LLM 프롬프트 정의, 모델이 반드시 {"summary": "..."} 형태로 응답
+    /* LLM 기반 텍스트 요약 */
     fun summarize(req: SummarizeRequest) : SummarizeResponse {
         val sysPrompt = """
             You are a precise summarizer.
@@ -26,12 +28,7 @@ class AiService(
         """.trimIndent()
 
         // OpenAI API 요청 파라미터 구성
-        val params = ChatCompletionCreateParams.builder()
-            .model(ChatModel.GPT_4)
-            .temperature(0.0)
-            .addSystemMessage(sysPrompt)
-            .addUserMessage(req.text)
-            .build()
+        val params = buildChatParams(sysPrompt, req.text)
 
         // API 호출 : OpenAI API에 요청 보내기
         val completion: ChatCompletion = client.chat().completions().create(params)
@@ -52,4 +49,43 @@ class AiService(
 
         return SummarizeResponse(summaryText)
     }
+
+    /* LLM 기반 감성분석 */
+    fun sentiment(req: SentimentRequest): SentimentResponse {
+        val sysPrompt = """
+            You are a sentiment classifier.
+            Return strictly JSON: {"label":"positive|neutral|negative","score":-10..10}
+            No explanations, no other fields.
+        """.trimIndent()
+
+        val params = buildChatParams(sysPrompt, req.text)
+
+        val completion: ChatCompletion = client.chat().completions().create(params)
+        val content = completion.choices()[0].message().content().orElse("{}")
+
+        return try {
+             val node = mapper.readTree(content)
+            SentimentResponse(
+                label = node.get("label")?.asText() ?: "neutral",
+                score = node.get("score")?.asInt() ?: 0,
+            )
+        } catch (_: Exception){
+            // JSON 형식이 맞지 않는 경우 fallback
+            SentimentResponse("neutral", 0)
+        }
+
+    }
+}
+
+private fun buildChatParams(
+    sysPrompt: String,
+    text: String
+): ChatCompletionCreateParams {
+    val params = ChatCompletionCreateParams.builder()
+        .model(ChatModel.GPT_4)
+        .temperature(0.0)
+        .addSystemMessage(sysPrompt)
+        .addUserMessage(text)
+        .build()
+    return params
 }
