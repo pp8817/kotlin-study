@@ -6,8 +6,10 @@ import com.openai.models.chat.completions.ChatCompletionCreateParams
 import com.psionicai.ai_backend.domain.ai.dto.request.SummarizeRequest
 import com.psionicai.ai_backend.domain.ai.dto.response.SummarizeResponse
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.psionicai.ai_backend.domain.ai.dto.request.CompleteRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.KeywordRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SentimentRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.CompleteResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.KeywordResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SentimentResponse
 import org.springframework.stereotype.Service
@@ -105,6 +107,43 @@ class AiService(
 
         return KeywordResponse(
             keywords = capped
+        )
+    }
+
+    /* 프롬프트 응답(LLM) + 토큰 사용량 기록 */
+    fun complete(req: CompleteRequest): CompleteResponse {
+        // 시스템/유저 메시지 구성
+        val sys = """
+            You are a helpful assistant.
+            Answer the user's prompt directly and concisely.
+            Do not include any extra metadata.
+        """.trimIndent()
+
+        val user = req.prompt
+
+        // 모델 추출
+        val params = buildChatParams(sys, user)
+        val completion = runCatching { client.chat().completions().create(params) }
+            .getOrElse { throw RuntimeException("OpenAI call failed!", it) }
+
+        // 응답 텍스트(content) 안전 추출
+        val output = (completion.choices().firstOrNull()
+            ?.message()?.content()?.orElse(null)
+            ?.takeIf { it.isNotBlank() }
+            ?: "")
+
+        // 토큰 사용량 추출
+        val usage = completion.usage().orElse(null)
+        val promptTokens = usage?.promptTokens() ?: 0
+        val completionTokens = usage?.completionTokens() ?: 0
+        val totalTokens = usage?.totalTokens() ?: (promptTokens + completionTokens)
+
+        // 5) 응답 DTO 구성
+        return CompleteResponse(
+            output,
+            promptTokens,
+            completionTokens,
+            totalTokens
         )
     }
 

@@ -1,8 +1,10 @@
 package com.psionicai.ai_backend.domain.ai.api
 
+import com.psionicai.ai_backend.domain.ai.dto.request.CompleteRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.KeywordRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SentimentRequest
 import com.psionicai.ai_backend.domain.ai.dto.request.SummarizeRequest
+import com.psionicai.ai_backend.domain.ai.dto.response.CompleteResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.KeywordResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SentimentResponse
 import com.psionicai.ai_backend.domain.ai.dto.response.SummarizeResponse
@@ -38,6 +40,13 @@ class AiController(
     @PostMapping("/keywords")
     fun keywords(@Validated @RequestBody req: KeywordRequest): ResponseEntity<KeywordResponse>? {
         val response: KeywordResponse = aiService.keyword(req)
+        return ResponseEntity.ok(response)
+    }
+
+    /* 프롬프트 응답(LLM) + 토큰 사용량 기록 */
+    @PostMapping("/complete")
+    fun complete(@Validated @RequestBody req: CompleteRequest): ResponseEntity<CompleteResponse>? {
+        val response: CompleteResponse = aiService.complete(req)
         return ResponseEntity.ok(response)
     }
 }
